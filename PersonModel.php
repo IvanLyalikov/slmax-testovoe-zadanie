@@ -18,6 +18,12 @@ class PersonModel
         'town'
     ];
 
+    // Define whether to return birthdate or age by `birthdate` getter.
+    protected bool $return_age = false;
+
+    // Define whether to return binary or verbose gender by `gender` getter.
+    protected bool $return_verbose_gender = false;
+
     /**
      * Init model field values.
      * @param DatabaseConnection $db object to interact with the database.
@@ -81,6 +87,64 @@ class PersonModel
         {
             $this->db->delete(self::TABLE_NAME, ['person_id' => $this->person_id]);
         }
+    }
+
+
+    /**
+     * Get all the model fields as an array.
+     * @return array: The model fields.
+     */
+    public function getFields(): array
+    {
+        foreach (self::FIELD_NAMES as $name)
+        {
+            $fields[] = $this->$name;
+        }
+        return $fields;
+    }
+
+
+    /**
+     * Return a copy of that instance with specified format for model field getters.
+     * @param bool $verbose_gender Specify whether verbose or binary format
+     * will be used in the new instance by `gender` field getter. 
+     * @param bool $age Specify whether birthdate or age format
+     * will be used in the new instance by `birthdate` field getter. 
+     * @return PersonModel copy of this instance.
+     */
+    public function formatFields(bool $verbose_gender, bool $age): PersonModel
+    {
+        $cloned = clone $this;
+        $cloned->return_verbose_gender = $verbose_gender;
+        $cloned->return_age = $age;
+        return $cloned;
+    }
+
+    /**
+     * Get a person age by the `birthdate`.
+     * @param string|DateTime $birthdate date of birth.
+     * @return int age.
+     */
+    public static function getAge(string|DateTime $birthdate): int
+    {
+        if (is_string($birthdate))
+        {
+            Validators::validateDatetime($birthdate, '"birthdate" argument');
+            $birthdate = date_create($birthdate);
+        }
+        $interval = date_diff($birthdate, date_create());
+        return intval($interval->format('%Y'));
+    }
+
+    /**
+     * Get verbose gender by `gender`.
+     * @param string|int|bool $gender Must be 0/1 or true/false.
+     * @return string 'муж' if `gender` is 0/false, else 'жен'.
+     */
+    public static function getVerboseGender(string|int|bool $gender): string
+    {
+        Validators::validateBit($gender, '"gender" argument');
+        return ($gender == 0) ? 'муж' : 'жен'; 
     }
 
     /**
@@ -159,48 +223,16 @@ class PersonModel
      */
     public function __get(string $name)
     {
+        if ($name === 'gender' and $this->return_verbose_gender)
+        {
+            return self::getVerboseGender($this->gender);
+        }
+        elseif ($name === 'birthdate' and $this->return_age)
+        {
+            return self::getAge($this->birthdate);
+        }
         return $this->$name;
     }
 
-    /**
-     * Get all the model fields as an array.
-     * @return array: The model fields.
-     */
-    public function getFields(): array
-    {
-        foreach (self::FIELD_NAMES as $name)
-        {
-            $fields[] = $this->$name;
-        }
-        return $fields;
-    }
-
-
-    /**
-     * Get a person age by the `birthdate`.
-     * @param string|DateTime $birthdate date of birth.
-     * @return int age.
-     */
-    public static function getAge(string|DateTime $birthdate): int
-    {
-        if (is_string($birthdate))
-        {
-            Validators::validateDatetime($birthdate, '"birthdate" argument');
-            $birthdate = date_create($birthdate);
-        }
-        $interval = date_diff($birthdate, date_create());
-        return intval($interval->format('%Y'));
-    }
-
-    /**
-     * Get verbose gender by `gender`.
-     * @param string|int|bool $gender Must be 0/1 or true/false.
-     * @return string 'муж' if `gender` is 0/false, else 'жен'.
-     */
-    public static function getVerboseGender(string|int|bool $gender): string
-    {
-        Validators::validateBit($gender, '"gender" argument');
-        return ($gender == 0) ? 'муж' : 'жен'; 
-    }
     
 }
