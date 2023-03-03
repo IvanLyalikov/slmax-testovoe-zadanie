@@ -2,6 +2,9 @@
 
 require_once('autoload.php');
 
+/**
+ * Class that contains validators as static methods.
+ */
 class Validators
 {
     protected static function getErrMsg(string $err_prefix, string $msg): string
@@ -9,6 +12,10 @@ class Validators
         return "$err_prefix: " . $msg;
     }
 
+    /**
+     * Throw `ValidationError` if the `str` length greater than `max_length`.
+     * `err_prefix` is added before default error message.
+     */
     public static function validateMaxLength(string $str, int $max_length, string $err_prefix = '')
     {
         if (strlen($str) > 30)
@@ -18,6 +25,10 @@ class Validators
         }
     }
 
+     /**
+     * Throw `ValidationError` if the `str` has at least one non-alphabetic cahracher.
+     * `err_prefix` is added before default error message.
+     */
     public static function validateAlphabeic(string $str, string $err_prefix = '')
     {
         if (!ctype_alpha($str))
@@ -27,6 +38,10 @@ class Validators
         }
     }
 
+     /**
+     * Throw `ValidationError` if the `str` has at least one non-numerical characher.
+     * `err_prefix` is added before default error message.
+     */
     public static function validateNumeric(string $str, string $err_prefix = '')
     {
         if (!ctype_digit($str))
@@ -36,6 +51,10 @@ class Validators
         }
     }
 
+     /**
+     * Throw `ValidationError` if the `str` cannot be enterpreted as datatime.
+     * `err_prefix` is added before default error message.
+     */
     public static function validateDatetime(string $str, string $err_prefix = '')
     {
         $str = date_create($str);
@@ -46,7 +65,11 @@ class Validators
         }
     }
 
-    public static function validateBit(string|int $value, string $err_prefix = '')
+     /**
+     * Throw `ValidationError` if the `value` cannot be interpreted as `0` or `1`.
+     * `err_prefix` is added before default error message.
+     */
+    public static function validateBit(string|int|bool $value, string $err_prefix = '')
     {
         if (!in_array($value, [0, 1]))
         {
