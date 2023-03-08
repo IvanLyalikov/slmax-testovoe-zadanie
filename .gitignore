@@ -1,3 +1,4 @@
-tests/
+show/
 .vscode/
 test.php
+*cache*

@@ -1,10 +1,15 @@
 <?php
+namespace Models;
 
 require_once('autoload.php');
 
-if (!class_exists('PersonModel'))
+use \Database\DatabaseConnection;
+
+
+if (!class_exists(__NAMESPACE__ . '\PersonModel'))
 {
-    throw new Exception('Class "PersonModel" not found');
+    $name = __NAMESPACE__ . '/PersonModel';
+    throw new \Exception("Class \"$name\" not found");
 }
 
 /**
@@ -32,10 +37,11 @@ class PersonListModel
     function __construct(protected DatabaseConnection $db, ...$conditions)
     {
         $this->checkFields($conditions);
-        $rows = $this->db->selectWhere(PersonModel::TABLE_NAME, $conditions);
-        foreach ($rows as $row)
+        $row_values = $this->db->selectWhere(PersonModel::TABLE_NAME, $conditions);
+        foreach ($row_values as $args)
         {
-            $this->objects[] = new PersonModel($db, ...$row, validate: false);
+            $args['validate'] = false;
+            $this->objects[] = new PersonModel($db, ...$args);
         }
     }
 
@@ -44,6 +50,7 @@ class PersonListModel
      */
     public function delete()
     {
+        $ids = [];
         foreach ($this->objects as $object)
         {
             $ids[] = $object->person_id;
@@ -76,6 +83,7 @@ class PersonListModel
      * @param array $conditions array where each element in the format:
      * `field_name__lookup => some_value`
      */
+
     protected function checkFields(array $conditions)
     {
         foreach ($conditions as $key => $value)
@@ -83,7 +91,7 @@ class PersonListModel
             $field_name = explode('__', $key, 2)[0];
             if (!in_array($field_name, PersonModel::FIELD_NAMES))
             {
-                throw new Exception("Invalid field name '$field_name'");
+                throw new \Exception("Invalid field name '$field_name'");
             }
         }
     }

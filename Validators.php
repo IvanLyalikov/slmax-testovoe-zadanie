@@ -1,4 +1,5 @@
 <?php
+namespace Utils;
 
 require_once('autoload.php');
 
@@ -18,7 +19,7 @@ class Validators
      */
     public static function validateMaxLength(string $str, int $max_length, string $err_prefix = '')
     {
-        if (strlen($str) > 30)
+        if (strlen($str) > $max_length)
         {
             throw new ValidationError(self::getErrMsg($err_prefix,
                 "The value $str has length greater that $max_length"));
@@ -52,13 +53,13 @@ class Validators
     }
 
      /**
-     * Throw `ValidationError` if the `str` cannot be enterpreted as datatime.
+     * Throw `ValidationError` if `date_create($str)` function returns false.
      * `err_prefix` is added before default error message.
      */
     public static function validateDatetime(string $str, string $err_prefix = '')
     {
-        $str = date_create($str);
-        if (! $str)
+        $res = date_create($str);
+        if (! $res)
         {
             throw new ValidationError(self::getErrMsg($err_prefix,  
                 "The value $str cannot be interpreted as datetime"));

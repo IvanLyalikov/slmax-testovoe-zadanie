@@ -1,7 +1,12 @@
 <?php
+namespace Models;
 
 require_once('autoload.php');
-require_once('exceptions.php');
+
+use \DateTime;
+use \Database\DatabaseConnection;
+use \Utils\Validators;
+use \Utils\DoesNotExistsError;
 
 /**
  * Class for working with 'people' table.
@@ -36,7 +41,7 @@ class PersonModel
             protected string|DateTime $birthdate,
             protected string|int|bool $gender,
             protected string $town,
-            protected string|int|bool|null $person_id = null,
+            protected string|int|null $person_id = null,
             bool $validate = true)
     {
         if ($validate)
@@ -58,8 +63,15 @@ class PersonModel
      */
     public static function fromDB(DatabaseConnection $db, int|string $person_id)
     {
-        $fields = $db->select(self::TABLE_NAME, ['person_id' => $person_id])[0];
-        return new static($db, ...$fields, validate: false);
+        Validators::validateNumeric($person_id, '"person_id" field');
+        $result = $db->select(self::TABLE_NAME, ['person_id' => $person_id]);
+        if (empty($result))
+        {
+            throw new DoesNotExistsError($person_id, self::TABLE_NAME);
+        }
+        $fields = $result[0];
+        $fields['validate'] = false;
+        return new static($db, ...$fields);
     }
 
     /**
@@ -91,20 +103,6 @@ class PersonModel
 
 
     /**
-     * Get all the model fields as an array.
-     * @return array: The model fields.
-     */
-    public function getFields(): array
-    {
-        foreach (self::FIELD_NAMES as $name)
-        {
-            $fields[] = $this->$name;
-        }
-        return $fields;
-    }
-
-
-    /**
      * Return a copy of that instance with specified format for model field getters.
      * @param bool $verbose_gender Specify whether verbose or binary format
      * will be used in the new instance by `gender` field getter. 
@@ -120,6 +118,38 @@ class PersonModel
         return $cloned;
     }
 
+
+    /**
+     * Get all the model fields as an array where keys are field names
+     * and valus are field values.
+     * @return array: The model fields.
+     */
+    public function getFields(): array
+    {
+        foreach (self::FIELD_NAMES as $name)
+        {
+            $fields[$name] = $this->$name;
+        }
+        return $fields;
+    }
+
+    /**
+     * Get a property by the `name`.
+     */
+    public function __get(string $name)
+    {
+        if ($name === 'gender' and $this->return_verbose_gender)
+        {
+            return self::getVerboseGender($this->gender);
+        }
+        elseif ($name === 'birthdate' and $this->return_age)
+        {
+            return self::getAge($this->birthdate);
+        }
+        return $this->$name;
+    }
+
+    
     /**
      * Get a person age by the `birthdate`.
      * @param string|DateTime $birthdate date of birth.
@@ -133,7 +163,7 @@ class PersonModel
             $birthdate = date_create($birthdate);
         }
         $interval = date_diff($birthdate, date_create());
-        return intval($interval->format('%Y'));
+        return intval($interval->format('%r%Y'));
     }
 
     /**
@@ -147,17 +177,25 @@ class PersonModel
         return ($gender == 0) ? 'муж' : 'жен'; 
     }
 
+
     /**
      * Validate `person_id` value and set it to the property.
      * `ValidationError` will be thrown on the validation failure. 
      */
-    public function setPersonId(int | string | null $person_id): void
+    public function setPersonId(int|string|null $person_id): void
     {
-        if (is_string($person_id))
+        if ($person_id === '' or is_null($person_id))
         {
-            Validators::validateNumeric($person_id, '"person_id" field');
+            $this->person_id = null;
         }
-        $this->person_id = strval($person_id);
+        else
+        {
+            if (is_string($person_id))
+            {
+                Validators::validateNumeric($person_id, '"person_id" field');
+            }
+            $this->person_id = strval($person_id);
+        }
     }
 
     /**
@@ -217,22 +255,4 @@ class PersonModel
         Validators::validateMaxLength($town, 168, '"town" field');
         $this->town = $town;
     }
-
-    /**
-     * Get a property by the `name`.
-     */
-    public function __get(string $name)
-    {
-        if ($name === 'gender' and $this->return_verbose_gender)
-        {
-            return self::getVerboseGender($this->gender);
-        }
-        elseif ($name === 'birthdate' and $this->return_age)
-        {
-            return self::getAge($this->birthdate);
-        }
-        return $this->$name;
-    }
-
-    
 }

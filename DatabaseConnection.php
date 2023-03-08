@@ -1,7 +1,10 @@
 <?php
+namespace Database;
 
 require_once('autoload.php');
-require_once('exceptions.php');
+
+use \Utils\Settings;
+use \Utils\DatabaseError;
 
 
 /**
@@ -32,11 +35,18 @@ class DatabaseConnection
             $user ?? Settings::DB_USER,
             $password ?? Settings::DB_PASSWORD,
         ));
+        if ($this->dbconn === false)
+        {
+            throw new DatabaseError("cannot open a connection to the database");
+        }
     }
 
     function __destruct()
     {
-        pg_close($this->dbconn);
+        if ($this->dbconn)
+        {
+            pg_close($this->dbconn);
+        }
     }
 
     /**
@@ -46,10 +56,10 @@ class DatabaseConnection
      * table_name, and whose values are the values of those fields that are
      * to be inserted.
      */
-    public function insert(string $table_name, array $values)
+    public function insert(string $table_name, array $values): void
     {
         $res = pg_insert($this->dbconn, $table_name, $values);
-        if (! $res)
+        if ($res === false)
         {
             throw new DatabaseError("Failed to insert into '$table_name' table");
         }
@@ -62,10 +72,10 @@ class DatabaseConnection
      * table table_name, and whose values are the values of those fields 
      * that are to be deleted.
      */
-    public function delete(string $table_name, array $conditions)
+    public function delete(string $table_name, array $conditions): void
     {
         $res = pg_delete($this->dbconn, $table_name, $conditions);
-        if (! $res)
+        if ($res === false)
         {
             throw new DatabaseError("Failed to delete from '$table_name' table");
         }
@@ -79,10 +89,10 @@ class DatabaseConnection
      * table table_name, and whose values are the values of those fields 
      * that are to be selected.
      */
-    public function select(string $table_name, array $conditions)
+    public function select(string $table_name, array $conditions): array
     {
         $res = pg_select($this->dbconn, $table_name, $conditions);
-        if (! $res)
+        if ($res === false)
         {
             throw new DatabaseError("Failed to select from '$table_name' table");
         }
@@ -91,7 +101,7 @@ class DatabaseConnection
 
     /**
      * Selects records specified by conditions.
-     * Throw `DatabaseError` on failire.
+     * Throw `\DatabaseError` on failire.
      * @param string $table_name Table from which to select.
      * @param array $conditions An array whose keys are in the format:
      * `field_name`__`lookup` and whose values are the values of those
@@ -106,22 +116,21 @@ class DatabaseConnection
      *  - `not` replaced to `!=`
      * If only field name is provided then `=` operator will be used in SQL query.
      */
-    public function selectWhere(string $table_name, array $conditions)
+    public function selectWhere(string $table_name, array $conditions): array
     {
         $lookups = $this->getLookups($conditions);
         $fields = $this->removeLookups($conditions);
         $fields = pg_convert($this->dbconn, $table_name, $fields);
-        if (! $fields)
+        if ($fields === false)
         {
-            throw new DatabaseError("Failed to convert data for use with '$table_name' table");
+            throw new DatabaseError("Failed to convert data for '$table_name' table");
         }
 
-        //$this->escapeFieldNames($fields);
         $result = pg_query(
             $this->dbconn, 
-            "SELECT * FROM $table_name {$this->buildWhereExpression($fields, $lookups)}",
+            "SELECT * FROM $table_name{$this->buildWhereExpression($fields, $lookups)}",
         );
-        if (! $result)
+        if ($result === false)
         {
             throw new DatabaseError("Failed to select from '$table_name' table");
         }
@@ -129,21 +138,42 @@ class DatabaseConnection
     }
 
     /**
-     * Delete values from `table_name`. Throw `DatabaseError` on failire.
+     * Delete values from `table_name`. Throw `\DatabaseError` on failire.
      * @param string $table_name Table from which to delete.
      * @param string $id_field_name Name of primary key column in the `table_name`.
      * @param array $ids Primary key values which specify the rows to delete.
      */
     public function deleteByIds(string $table_name, string $id_field_name, array $ids)
     {
+        if (empty($ids))
+        {
+            throw new \Exception('An array with id values must not be empty');
+        }
+        
         $this->escapeLitarals($ids);
         $ids = implode(',', $ids);
         $res = pg_query($this->dbconn, "DELETE FROM $table_name WHERE $id_field_name IN ($ids)");
-        if (! $res)
+        if ($res === false)
         {
             throw new DatabaseError("Failed to delete from '$table_name' table");
         }
     }
+
+
+    /**
+     * Split string in the format `field_name__lookup` into
+     * array [`fiels_name`, `lookup`].
+     * @param string $value A string in the format field_name__lookup`.
+     * @return array An array with [`fiels_name`, `lookup`].
+     */
+    public static function split(string $value): array
+    {
+        $splited = explode('__', $value, 2);
+        $field_name = $splited[0];
+        $lookup = (count($splited) == 2) ? $splited[1] : null;
+        return [$field_name, $lookup];
+    }
+
 
     /**
      * Build expression for the WHERE clause.
@@ -173,7 +203,7 @@ class DatabaseConnection
             {
                 if (!array_key_exists($lookup, $operators))
                 {
-                    throw new Exception('Invalid lookup "{$lookup}"');
+                    throw new \Exception('Invalid lookup "{$lookup}"');
                 }
                 $operator = $operators[$lookup];
             }
@@ -185,12 +215,12 @@ class DatabaseConnection
             $where_expression .= "$field_name $operator $value";
             if (array_key_last($fileds) !== $field_name)
             {
-                $where_expression .= ' and ';
+                $where_expression .= ' AND ';
             }
         }
         if ($where_expression)
         {
-            $where_expression = 'WHERE ' . $where_expression;
+            $where_expression = ' WHERE ' . $where_expression;
         }
         return $where_expression;
     }
@@ -208,19 +238,12 @@ class DatabaseConnection
     }
 
 
-    protected function split(string $value): array
-    {
-        $splited = explode('__', $value, 2);
-        $field_name = $splited[0];
-        $lookup = (count($splited) == 2) ? $splited[1] : null;
-        return [$field_name, $lookup];
-    }
-
     protected function getLookups($conditions, bool $add_quotes = true): array
     {
+        $lookups = [];
         foreach ($conditions as $key => $value)
         {
-            [$field_name, $lookup] = $this->split($key);
+            [$field_name, $lookup] = self::split($key);
             if ($add_quotes)
             {
                 $field_name = "\"$field_name\"";
@@ -232,15 +255,12 @@ class DatabaseConnection
 
     protected function removeLookups($conditions): array
     {
+        $modified_conditions = [];
         foreach ($conditions as $key => $value)
         {
-            [$field_name, $lookup] = $this->split($key);
-            if (!is_null($lookup))
-            {
-                $conditions[$field_name] = $value;
-                unset($conditions[$key]);
-            }
+            [$field_name, $lookup] = self::split($key);
+            $modified_conditions[$field_name] = $value;
         }
-        return $conditions;
+        return $modified_conditions;
     }
 }
